@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  # OpenLDAP Directory Server
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: carbonio-ldap
+    environment:
+      LDAP_ORGANISATION: "Carbonio"
+      LDAP_DOMAIN: "carbonio.local"
+      LDAP_ADMIN_PASSWORD: "password"
+      LDAP_CONFIG_PASSWORD: "qh6hWZvc"
+      LDAP_TLS: "false"
+    ports:
+      - "1389:389"
+      - "636:636"
+    networks:
+      - carbonio-net
+    volumes:
+      - ldap-data:/var/lib/ldap
+      - ldap-config:/etc/ldap/slapd.d
+
+  # MariaDB Database
+  mariadb:
+    build:
+      context: .
+      dockerfile: docker/mariadb/Dockerfile
+    container_name: carbonio-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: password
+    ports:
+      - "3306:3306"
+    networks:
+      - carbonio-net
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Carbonio Mailbox Service
+  mailbox:
+    build:
+      context: .
+      dockerfile: docker/mailbox/Dockerfile
+    container_name: carbonio-mailbox
+    hostname: mailbox.carbonio.local
+    environment:
+      # LDAP Configuration
+      LDAP_URL: "ldap://openldap:389"
+      LDAP_ROOT_PASSWORD: "qh6hWZvc"
+      LDAP_ADMIN_PASSWORD: "password"
+
+      # Database Configuration
+      MARIADB_URL: "mariadb"
+      MARIADB_PORT: "3306"
+      MARIADB_ROOT_PASSWORD: "password"
+
+      # Service URLs (optional - for full Carbonio stack)
+      CARBONIO_FILES_SERVICE_URL: "http://carbonio-files:10000"
+      CARBONIO_PREVIEW_SERVICE_URL: "http://carbonio-preview:10000"
+
+      # Java Options
+      MAILBOXD_JAVA_OPTS: "-Xss256k -Xms2048m -Xmx2048m"
+
+      # Tracing (optional - uncomment to enable)
+      # TRACING_OPTIONS: "-Dotel.service.name=carbonio-mailbox -Dotel.traces.exporter=zipkin -Dotel.exporter.zipkin.endpoint=http://zipkin:9411/api/v2/spans"
+    ports:
+      - "8080:8080"   # HTTP API
+      - "7071:7071"   # Admin API
+      - "8443:8443"   # HTTPS
+      - "5005:5005"   # Debug port (JDWP)
+    networks:
+      - carbonio-net
+    volumes:
+      - mailbox-store:/opt/zextras/store
+      - mailbox-index:/opt/zextras/index
+      - mailbox-logs:/opt/zextras/log
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      openldap:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/service/soap"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+networks:
+  carbonio-net:
+    driver: bridge
+
+volumes:
+  ldap-data:
+  ldap-config:
+  mariadb-data:
+  mailbox-store:
+  mailbox-index:
+  mailbox-logs:
