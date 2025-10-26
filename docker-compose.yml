@@ -3,6 +3,7 @@ version: '3.8'
 services:
   # OpenLDAP Directory Server
   openldap:
+#    platform: linux/amd64
     image: osixia/openldap:1.5.0
     container_name: carbonio-ldap
     environment:
@@ -22,6 +23,7 @@ services:
 
   # MariaDB Database
   mariadb:
+#    platform: linux/amd64
     build:
       context: .
       dockerfile: docker/mariadb/Dockerfile
@@ -42,6 +44,7 @@ services:
 
   # Carbonio Mailbox Service
   mailbox:
+#    platform: linux/amd64
     build:
       context: .
       dockerfile: docker/mailbox/Dockerfile
